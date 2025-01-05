@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>큰 수 문장제</title>
+  <!-- MathJax 로드 (LaTeX 수식 렌더링용) -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+    defer
+  ></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
+    }
+
+    h1, h2, h3 {
+      text-align: center;
+    }
+
+    #gameScreen, #questionScreen, #resultScreen {
+      display: none;
+    }
+
+    #energyBarContainer {
+      width: 300px;
+      height: 20px;
+      background-color: #ddd;
+      margin: 10px 0;
+      position: relative;
+    }
+
+    #energyBar {
+      background-color: #fa8072;
+      width: 100%;
+      height: 100%;
+      transition: width 0.2s linear;
+    }
+
+    #totalTime {
+      margin: 10px 0;
+      font-weight: bold;
+      color: #333;
+    }
+
+    #livesDisplay {
+      color: #b00;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+
+    #scoreDisplay {
+      color: #006400;
+      margin: 10px 0;
+      font-weight: bold;
+    }
+
+    #answerInput {
+      width: 200px;
+      height: 30px;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 5px;
+    }
+
+    #submitAnswerBtn {
+      display: inline-block;
+      padding: 10px 20px;
+      margin-left: 10px;
+      font-size: 1rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #666;
+      background: #eee;
+    }
+
+    #submitAnswerBtn:hover {
+      background: #ccc;
+    }
+
+    #startButton, #submitScoreButton {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 1rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #666;
+      background: #eee;
+    }
+
+    #startButton:hover, #submitScoreButton:hover {
+      background: #ccc;
+    }
+
+    #response {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      font-size: 0.9rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+<h1>큰 수 문장제</h1>
+
+<!-- 난이도 및 이름 입력 화면 -->
+<div id="gameScreen">
+  <h3>이름을 입력하세요</h3>
+  <input type="text" id="playerName" placeholder="이름" />
+  
+  <h3>난이도를 선택하세요</h3>
+  <button onclick="setDifficulty('최상')">최상 (20초, 문제당 20점)</button>
+  <button onclick="setDifficulty('상')">상 (30초, 문제당 15점)</button>
+  <button onclick="setDifficulty('중')">중 (40초, 문제당 13점)</button>
+  <button onclick="setDifficulty('하')">하 (시간 제한 없음, 문제당 10점)</button>
+</div>
+
+<!-- 문제 표시 화면 -->
+<div id="questionScreen">
+  <div id="totalTime">총 경과 시간: 0초</div>
+  <div id="livesDisplay"></div>
+  <div id="scoreDisplay"></div>
+  <div id="energyBarContainer">
+    <div id="energyBar"></div>
+  </div>
+  
+  <div id="questionText" style="margin: 20px 0; font-weight: bold;"></div>
+  
+  <input type="text" id="answerInput" placeholder="정답(숫자만)" />
+  <button id="submitAnswerBtn" onclick="handleSubmitAnswer()">제출</button>
+</div>
+
+<!-- 결과 화면 -->
+<div id="resultScreen">
+  <h2 id="resultMessage"></h2>
+  <p>최종 점수: <span id="finalScore"></span></p>
+  <p>총 소요 시간: <span id="finalTime"></span>초</p>
+  
+  <button id="submitScoreButton" onclick="handleScoreSubmit()">점수 전송</button>
+  <div id="response"></div>
+</div>
+
+<script>
+// 모든 문제(31개) - 주관식
+// answer는 숫자(또는 소수) 형태로 저장.
+// 정답 입력 시엔 "숫자만" 입력하는 걸로 가정합니다.
+const allQuestions = [
+  // 동전 합계 10문제
+  {
+    question: `민호가 저금통을 열었더니 \\(1000\\text{원}\\)짜리 지폐 16장, \\(100\\text{원}\\) 동전 28개, \\(10\\text{원}\\) 동전 5개가 있습니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 18850
+  },
+  {
+    question: `소영이가 돼지저금통을 깼더니 \\(500\\text{원}\\) 동전 14개, \\(100\\text{원}\\) 동전 3개, \\(50\\text{원}\\) 동전 7개가 있습니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 7650
+  },
+  {
+    question: `지훈이가 용돈을 모았는데, \\(1000\\text{원}\\) 지폐 5장, \\(500\\text{원}\\) 동전 6개, \\(100\\text{원}\\) 동전 2개, \\(50\\text{원}\\) 동전 4개입니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 8400
+  },
+  {
+    question: `영희는 \\(2000\\text{원}\\) 지폐 3장, \\(1000\\text{원}\\) 지폐 2장, \\(500\\text{원}\\) 동전 5개를 모았습니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 10500
+  },
+  {
+    question: `상민이는 \\(100\\text{원}\\) 동전 15개, \\(50\\text{원}\\) 동전 2개, \\(10\\text{원}\\) 동전 10개를 모았습니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 1700
+  },
+  {
+    question: `수진이는 \\(5000\\text{원}\\) 지폐 2장, \\(100\\text{원}\\) 동전 10개, \\(10\\text{원}\\) 동전 3개를 갖고 있습니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 11030
+  },
+  {
+    question: `동호는 \\(500\\text{원}\\) 동전 8개, \\(100\\text{원}\\) 동전 12개, \\(10\\text{원}\\) 동전 6개를 갖고 있습니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 5260
+  },
+  {
+    question: `아빠가 모아 둔 \\(500\\text{원}\\) 동전이 25개 있습니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 12500
+  },
+  {
+    question: `지아가 \\(10\\text{원}\\) 동전을 하루에 5개씩 7일 모으고, 거기에 \\(100\\text{원}\\) 동전 2개를 더했다면 총 얼마일까요? (숫자만 입력)`,
+    answer: 550
+  },
+  {
+    question: `민규가 빌려준 돈 중 일부를 돌려받았는데, \\(1000\\text{원}\\) 지폐 4장, \\(50\\text{원}\\) 동전 4개, \\(10\\text{원}\\) 동전 6개입니다. 전부 얼마일까요? (숫자만 입력)`,
+    answer: 4260
+  },
+
+  // 동전/지폐 높이 (10문제)
+  {
+    question: `\\(500\\text{원}\\) 동전 100개를 쌓으면 높이가 약 19\\(\\text{cm}\\)입니다. 5,000만 원을 전부 500원 동전으로 쌓으면 몇 \\(\\text{m}\\)일까요? (숫자만 입력)`,
+    answer: 190
+  },
+  {
+    question: `\\(100\\text{원}\\) 동전 100개를 쌓으면 높이가 약 12\\(\\text{cm}\\)입니다. 2,400만 원을 전부 이 동전으로 쌓으면 몇 \\(\\text{m}\\)일까요? (숫자만 입력)`,
+    answer: 288
+  },
+  {
+    question: `\\(10\\text{원}\\) 동전 100개를 포개면 높이가 약 8\\(\\text{cm}\\)입니다. 80만 원을 전부 이 동전으로 쌓으면 몇 \\(\\text{m}\\)일까요? (숫자만 입력)`,
+    answer: 64
+  },
+  {
+    question: `\\(50\\text{원}\\) 동전 100개를 포개면 높이가 약 15\\(\\text{cm}\\)입니다. 2,500만 원을 전부 이 동전으로 쌓으면 몇 \\(\\text{m}\\)일까요? (숫자만 입력)`,
+    answer: 750
+  },
+  {
+    question: `어느 지폐 100장을 겹치면 높이가 약 1\\(\\text{cm}\\)입니다. 1억 원을 전부 이 지폐로 쌓으면 몇 \\(\\text{m}\\)일까요? (숫자만 입력)`,
+    answer: 10
+  },
+  {
+    question: `다른 지폐 100장을 겹치면 높이가 약 9\\(\\text{cm}\\)입니다. 7,500만 원을 전부 이 지폐로 쌓으면 몇 \\(\\text{m}\\)일까요? (소수 입력)`,
+    answer: 13.5
+  },
+  {
+    question: `어느 지폐 100장을 포개면 높이가 약 1\\(\\text{cm}\\)입니다. 2,300만 원을 전부 이 지폐로 쌓으면 몇 \\(\\text{m}\\)일까요? (소수 입력)`,
+    answer: 2.3
+  },
+  {
+    question: `1\\(\\text{원}\\)짜리 동전 100개를 포개면 약 9\\(\\text{mm}\\)입니다. 5만 원을 전부 이 동전으로 쌓으면 몇 \\(\\text{m}\\)일까요? (소수 입력)`,
+    answer: 0.045
+  },
+  {
+    question: `\\(10\\text{원}\\) 동전 100개를 포개면 약 10\\(\\text{cm}\\)입니다. 2,000만 원을 전부 이 동전으로 쌓으면 몇 \\(\\text{m}\\)일까요? (숫자만 입력)`,
+    answer: 2000
+  },
+  {
+    question: `\\(500\\text{원}\\) 동전 50개를 포개면 약 10\\(\\text{cm}\\)입니다. 2,500만 원을 전부 이 동전으로 쌓으면 몇 \\(\\text{m}\\)일까요? (숫자만 입력)`,
+    answer: 100
+  },
+
+  // 필요한 금액(얼마가 모자라는가) 11문제
+  {
+    question: `민지는 10,000원짜리 책을 사려 합니다. 1,000원 지폐 8장을 갖고 있다면, 얼마나 더 필요한가요? (숫자만 입력)`,
+    answer: 2000
+  },
+  {
+    question: `민지는 12,000원짜리 청바지를 사고 싶습니다. 1,000원 지폐 9장을 갖고 있다면, 얼마나 더 필요한가요? (숫자만 입력)`,
+    answer: 3000
+  },
+  {
+    question: `지훈이는 23,000원짜리 운동화를 사고 싶습니다. 5,000원 지폐 3장과 1,000원 지폐 2장이 있다면, 얼마나 더 필요한가요? (숫자만 입력)`,
+    answer: 6000
+  },
+  {
+    question: `소영이는 7,500원짜리 필통을 사고 싶습니다. 1,000원 지폐 5장과 500원 동전 2개가 있다면, 얼마나 모자랄까요? (숫자만 입력)`,
+    answer: 1500
+  },
+  {
+    question: `수진이는 18,000원짜리 책을 사고 싶습니다. 5,000원 지폐 2장과 1,000원 지폐 3장이 있다면, 얼마나 더 필요한가요? (숫자만 입력)`,
+    answer: 5000
+  },
+  {
+    question: `민호는 29,000원짜리 게임 소프트웨어를 사고 싶습니다. 10,000원 지폐 2장, 5,000원 지폐 1장, 1,000원 지폐 2장이 있다면, 얼마나 모자랄까요? (숫자만 입력)`,
+    answer: 2000
+  },
+  {
+    question: `지아는 10,000원짜리 케이스를 사고 싶습니다. 5,000원 지폐 1장, 1,000원 지폐 3장, 500원 동전 2개가 있다면, 얼마나 모자랄까요? (숫자만 입력)`,
+    answer: 1000
+  },
+  {
+    question: `상민이는 32,000원짜리 축구공을 사고 싶습니다. 10,000원 지폐 3장과 1,000원 지폐 1장이 있다면, 얼마나 더 모아야 할까요? (숫자만 입력)`,
+    answer: 1000
+  },
+  {
+    question: `영희는 45,000원짜리 재킷을 사고 싶습니다. 10,000원 지폐 4장과 5,000원 지폐 1장이 있다면, 얼마가 부족한가요? (숫자만 입력)`,
+    answer: 0
+  },
+  {
+    question: `현우는 60,000원짜리 스피커를 사고 싶습니다. 10,000원 지폐 5장, 5,000원 지폐 1장, 1,000원 지폐 3장이 있다면, 얼마가 더 필요한가요? (숫자만 입력)`,
+    answer: 2000
+  },
+  {
+    question: `지훈이는 100,000원짜리 이어폰을 사고 싶습니다. 10,000원 지폐 8장, 5,000원 지폐 2장, 1,000원 지폐 5장이 있다면, 얼마가 부족할까요? (숫자만 입력)`,
+    answer: 5000
+  }
+];
+
+// 전역 상태들
+let shuffledQuestions = [];
+let currentQuestionIndex = 0;
+let score = 0;
+let lives = 3;
+let totalElapsedTime = 0; // 전체 경과 시간(초)
+let gameInterval = null; // 전체 시간 측정
+let energyInterval = null; // 문제당 타이머
+let startTime = 0;
+let difficulty = null;
+let timeLimitPerQuestion = 0; // 난이도별 제한 시간
+let pointPerQuestion = 0;     // 난이도별 점수
+let gameInProgress = false;
+let barWidth = 100; // 에너지바 퍼센트
+
+// 난수 배열 섞기
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+// 난이도 설정
+function setDifficulty(level) {
+  difficulty = level;
+  switch (level) {
+    case "최상":
+      timeLimitPerQuestion = 20; 
+      pointPerQuestion = 20;
+      break;
+    case "상":
+      timeLimitPerQuestion = 30;
+      pointPerQuestion = 15;
+      break;
+    case "중":
+      timeLimitPerQuestion = 40;
+      pointPerQuestion = 13;
+      break;
+    case "하":
+      timeLimitPerQuestion = 0; // 무제한
+      pointPerQuestion = 10;
+      break;
+  }
+  startGame();
+}
+
+// 게임 시작
+function startGame() {
+  const nameField = document.getElementById("playerName");
+  if (!nameField.value.trim()) {
+    alert("이름을 입력하세요!");
+    return;
+  }
+
+  // 문제 섞기
+  shuffledQuestions = [...allQuestions];
+  shuffleArray(shuffledQuestions);
+
+  // 초기화
+  currentQuestionIndex = 0;
+  score = 0;
+  lives = 3;
+  totalElapsedTime = 0;
+  gameInProgress = true;
+  barWidth = 100;
+
+  // 화면 전환
+  document.getElementById("gameScreen").style.display = "none";
+  document.getElementById("questionScreen").style.display = "block";
+  document.getElementById("resultScreen").style.display = "none";
+
+  // 전체 경과 시간 측정
+  startTime = Date.now();
+  if (gameInterval) clearInterval(gameInterval);
+  gameInterval = setInterval(() => {
+    totalElapsedTime = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById("totalTime").textContent = `총 경과 시간: ${totalElapsedTime}초`;
+  }, 1000);
+
+  showQuestion();
+}
+
+// 문제 표시
+function showQuestion() {
+  if (currentQuestionIndex >= shuffledQuestions.length) {
+    // 문제 다 풀면 종료
+    endGame();
+    return;
+  }
+  document.getElementById("answerInput").value = ""; // 답안창 초기화
+  
+  const questionObj = shuffledQuestions[currentQuestionIndex];
+  document.getElementById("questionText").innerHTML = questionObj.question;
+  
+  document.getElementById("livesDisplay").textContent = `남은 기회: ${lives}`;
+  document.getElementById("scoreDisplay").textContent = `점수: ${score}`;
+
+  // MathJax 렌더링
+  MathJax.typeset();
+
+  // 에너지바 설정 (하 난이도=무제한 → 숨김)
+  if (difficulty === "하") {
+    document.getElementById("energyBarContainer").style.visibility = "hidden";
+  } else {
+    document.getElementById("energyBarContainer").style.visibility = "visible";
+    barWidth = 100;
+    updateEnergyBar();
+
+    if (energyInterval) clearInterval(energyInterval);
+    energyInterval = setInterval(() => {
+      // 0.2초마다 조금씩 감소
+      barWidth -= (100 / timeLimitPerQuestion) * 0.2;
+      updateEnergyBar();
+      if (barWidth <= 0) {
+        clearInterval(energyInterval);
+        // 시간 초과 → 오답 처리
+        alert("시간이 초과되었습니다. (오답 처리)");
+        lives--;
+        if (lives <= 0) {
+          endGame();
+          return;
+        }
+        currentQuestionIndex++;
+        showQuestion();
+      }
+    }, 200);
+  }
+}
+
+// 에너지바 갱신
+function updateEnergyBar() {
+  const bar = document.getElementById("energyBar");
+  if (barWidth < 0) barWidth = 0;
+  bar.style.width = barWidth + "%";
+}
+
+// 정답 제출 처리
+function handleSubmitAnswer() {
+  if (!gameInProgress) return;
+
+  // 제한 시간 타이머 중단
+  if (energyInterval) clearInterval(energyInterval);
+
+  const questionObj = shuffledQuestions[currentQuestionIndex];
+  const userAnswer = document.getElementById("answerInput").value.trim();
+  
+  // 숫자 변환
+  const userNum = parseFloat(userAnswer);
+  const correctNum = parseFloat(questionObj.answer);
+
+  // 입력이 숫자가 아닐 경우
+  if (isNaN(userNum)) {
+    alert("숫자로만 입력해주세요!");
+    // 재시도 가능하게 하기 위해, 다시 타이머를 돌릴 수도 있음(선택사항)
+    // 여기서는 일단 재시도 없이 오답 처리
+    lives--;
+    if (lives <= 0) {
+      endGame();
+      return;
+    }
+    currentQuestionIndex++;
+    showQuestion();
+    return;
+  }
+
+  // 비교 (소수 포함이므로 어느 정도 오차 허용)
+  if (Math.abs(userNum - correctNum) < 1e-9) {
+    // 정답
+    score += pointPerQuestion;
+    alert("정답입니다!");
+  } else {
+    // 오답
+    alert(`오답입니다!\n정답: ${questionObj.answer}`);
+    lives--;
+    if (lives <= 0) {
+      endGame();
+      return;
+    }
+  }
+
+  currentQuestionIndex++;
+  showQuestion();
+}
+
+// 게임 종료
+function endGame() {
+  gameInProgress = false;
+  document.getElementById("questionScreen").style.display = "none";
+  document.getElementById("resultScreen").style.display = "block";
+  clearInterval(gameInterval);
+  if (energyInterval) clearInterval(energyInterval);
+
+  document.getElementById("resultMessage").textContent =
+    lives <= 0 ? "게임 종료 (목숨 소진)" : "모든 문제를 풀었습니다!";
+  document.getElementById("finalScore").textContent = score;
+  document.getElementById("finalTime").textContent = totalElapsedTime;
+}
+
+// 점수 전송
+function handleScoreSubmit() {
+  const name = document.getElementById("playerName").value.trim();
+  const elapsedTime = totalElapsedTime;
+  saveData("큰 수 문장제", name, score, elapsedTime);
+}
+
+// 서버 전송 함수
+async function saveData(game, name, score, elapsedTime) {
+  const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+  const requestData = {
+    game,
+    name,
+    score: parseInt(score, 10),
+    elapsedTime: parseInt(elapsedTime, 10)
+  };
+
+  try {
+    const response = await fetch(FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    });
+
+    const responseData = await response.json();
+
+    if (response.ok) {
+      document.getElementById('response').innerText =
+        `성공: ${JSON.stringify(responseData, null, 2)}`;
+    } else {
+      document.getElementById('response').innerText =
+        `오류: ${JSON.stringify(responseData, null, 2)}`;
+    }
+  } catch (error) {
+    console.error('요청 실패:', error);
+    document.getElementById('response').innerText =
+      `네트워크 오류: ${error.message}`;
+  }
+}
+
+// 초기 화면 표시
+window.onload = () => {
+  document.getElementById("gameScreen").style.display = "block";
+};
+</script>
+</body>
+</html>
